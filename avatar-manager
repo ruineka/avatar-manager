@@ -1,0 +1,190 @@
+#!/bin/bash
+
+COMMAND=$1
+
+installer() {
+   # Installing avatarmanager to the system
+   sudo cp avatar-manager /usr/bin/
+   # Creating desktop entry
+   if [ ! -d /usr/share/applications/avatarmanager.desktop ]; then
+      echo "TODO: Add icon file"
+
+      echo '[Desktop Entry]
+
+# The type as listed above
+Type=Application
+
+# The name of the application
+Name=Avatar Manager
+
+# A comment which can/will be used as a tooltip
+Comment=Avatar tool for vtube streaming
+
+# The executable of the application, possibly with arguments.
+Exec=/bin/sh -c "/usr/bin/avatar-manager start-camera"
+
+# The name of the icon that will be used to display this entry
+Icon=avatarmanager.png
+
+# Describes whether this application needs to be run in a terminal or not
+Terminal=true
+
+# Describes the categories in which this entry should be shown
+Categories=Utility;
+' >$HOME/.local/share/applications/AvatarManager.desktop
+   fi
+}
+
+uninstaller() {
+   echo "function to remove avatarmanager"
+}
+start_camera() {
+   if [ ! -d "$HOME/.local/share/OpenSeeFace" ]; then
+      install_packages
+   fi
+   cd $HOME/.local/share/OpenSeeFace
+   virtualenv -p python env > /dev/null
+   source env/bin/activate
+   echo "Do we need an IP/PORT for the tool you are using? y/n"
+   read INPUT
+   if [ $INPUT == "y" ]; then
+      echo "You do NOT need to set ports if you are using VTube Studio"
+      echo "These default values will be for Warudo and maybe others"
+      echo "What IP should we use? DEFAULT: 127.0.0.1"
+      read IP
+      echo "What port should we use? DEFAULT: 11573 "
+      read PORT
+      python facetracker.py  -W 1280 -H 720 --discard-after 0 --scan-every 0 --no-3d-adapt 1 --max-feature-updates 900 -c 0 --ip=$IP --port=$PORT > /dev/null
+   elif [ $INPUT == "n" ]; then
+      echo "Starting OpenSeeFace"
+      python facetracker.py  -W 1280 -H 720 --discard-after 0 --scan-every 0 --no-3d-adapt 1 --max-feature-updates 900 -c 0 > /dev/null
+   else
+      echo "Invalid input"
+   fi
+}
+
+install_packages()
+{
+   selection=$(yad \
+   --title="Vtuber Setup Utility" \
+   --text="Select programs to install" \
+   --form \
+   --field="Vtube Studio:CHK" \
+   --field="Warudo:CHK" \
+   --field="VSeeFace:CHK" \
+   --field="OpenSeeFace:CHK" \
+   --field="OBS:CHK" \
+   --width=400 \
+   --height=200 \
+   --button="Install Selected:0" \
+   --button="Exit:1")
+
+   # Check the exit code of Yad
+   exit_code=$?
+
+   # If the user clicked "Install Selected"
+   if [ $exit_code -eq 0 ]; then
+      # Process the selections
+      echo "Installing selected programs..."
+      # Example: Extract individual selections
+      vtube_studio=$(echo "$selection" | awk -F"|" '{print $1}')
+      warudo=$(echo "$selection" | awk -F"|" '{print $2}')
+      vseeface=$(echo "$selection" | awk -F"|" '{print $3}')
+      openseeface=$(echo "$selection" | awk -F"|" '{print $4}')
+      obs=$(echo "$selection" | awk -F"|" '{print $5}')
+   else
+      echo "We ran into and error and need to close"
+      exit 1
+   fi
+
+   if [ $vseeface == "TRUE" ]; then
+      echo "This is to be implemented for now this is being used for information"
+      echo "Select the OpenSeeFace camera and select your microphone"
+      echo "You will want to use ip 127.0.0.1 and listen on port 11573 "
+      echo "Press start once you have this information entered"
+      echo "Now you will want to go to Settings>General Settings"
+      echo "Scroll down until you see OSC/VMC protocol"
+      echo "Select Send Data with OSC/VMC protocol"
+      echo "Enter ip of 127.0.0.1 and port of 39539"
+      echo "Click the X to close the general settings window and open up Warudo "
+   fi
+
+   if [ $warudo == "TRUE" ]; then
+      steam steam://rungameid/2079120
+   fi
+
+   if [ $vtube_studio == "TRUE" ]; then
+      echo "vtube was selected"
+      if [ ! -d "$HOME/.steam/steam/steamapps/common/VTube Studio/" ]; then
+         steam steam://rungameid/1325860
+         if [ ! -f "$HOME/.steam/steam/steamapps/common/VTube Studio/VTube Studio_Data/StreamingAssets/ip.txt" ]; then
+         echo "Creating ip.txt file for VTube Studio"
+         echo 'ip=0.0.0.0
+port=11573' > "$HOME/.steam/steam/steamapps/common/VTube Studio/VTube Studio_Data/StreamingAssets/ip.txt"
+         fi
+      else
+         echo "VTube Studio: It seems we already have this tool installed"
+      fi
+   fi
+
+   if [ $openseeface == "TRUE" ]; then
+      sleep 1
+      if [ -d "$HOME/.local/share/OpenSeeFace" ]; then
+         echo "OpenSeeFace: It seems we already have this tool installed"
+      else
+         echo "Downloading OpenSeeFace"
+         git clone https://github.com/emilianavt/OpenSeeFace $HOME/.local/share/OpenSeeFace
+         cd $HOME/.local/share/OpenSeeFace
+         virtualenv -p python env > /dev/null
+         source env/bin/activate
+
+         echo "Please enter your password when prompted"
+         sleep 1
+         ARCH_PACKAGES=(python-pip python-virtualenv git)
+         for package in "${ARCH_PACKAGES[@]}"
+         do
+
+            if ( ! pacman -Q | grep -F $package > /dev/null ); then
+            sudo pacman -Sy $package
+            fi
+            echo "$package is installed"
+         done
+
+         PIP_PACKAGES=(onnxruntime opencv-python pillow numpy)
+
+         for package in "${PIP_PACKAGES[@]}"
+         do
+
+            if ( ! pip list | grep -F $package > /dev/null ); then
+               pip install $package
+            fi
+            echo "$package is installed"
+         done
+         fi
+      fi
+}
+
+# Check the command and execute the corresponding function
+case "$COMMAND" in
+   "start-camera")
+      if [ -d "$HOME/.local/share/OpenSeeFace" ]; then
+         start_camera
+      else
+         echo "Error: OpenSeeFace is not installed."
+      fi
+      ;;
+   "install")
+      installer
+      ;;
+   "install-packages")
+      install_packages
+      ;;
+   "remove")
+      uninstaller
+      ;;
+   *)
+      echo "Error: Invalid command '$COMMAND'."
+      echo "Usage: $0 [run | install | packages | remove]"
+      exit 1
+      ;;
+esac
