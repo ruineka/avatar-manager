@@ -40,26 +40,61 @@ uninstaller() {
 }
 start_camera() {
    if [ ! -d "$HOME/.local/share/OpenSeeFace" ]; then
-      install_packages
+      yad --title="Yes/No Prompt" --text="You are missing needed tools, Install now?" \
+         --image="dialog-question" --button="Yes:0" --button="No:1" \
+         --width=300 --height=100
+      CHOICE=$?
+
+      if [ $CHOICE -eq 0 ]; then
+         install_packages
+         start_camera
+         exit 0
+      else
+         exit 1
+      fi
    fi
    cd $HOME/.local/share/OpenSeeFace
    virtualenv -p python env > /dev/null
    source env/bin/activate
-   echo "Do we need an IP/PORT for the tool you are using? y/n"
-   read INPUT
-   if [ $INPUT == "y" ]; then
-      echo "You do NOT need to set ports if you are using VTube Studio"
-      echo "These default values will be for Warudo and maybe others"
-      echo "What IP should we use? DEFAULT: 127.0.0.1"
-      read IP
-      echo "What port should we use? DEFAULT: 11573 "
-      read PORT
-      python facetracker.py  -W 1280 -H 720 --discard-after 0 --scan-every 0 --no-3d-adapt 1 --max-feature-updates 900 -c 0 --ip=$IP --port=$PORT > /dev/null
+   yad --title="Yes/No Prompt" --text="Do you want to enter server info?" \
+      --image="dialog-question" --button="Yes:0" --button="No:1" \
+      --width=300 --height=100
+   CHOICE=$?
+
+   if [ $CHOICE -eq 0 ]; then
+      DEFAULT_IP="127.0.0.1"
+      DEFAULT_PORT="11573"
+      serverinfo=$(yad --title="VMC Server Info" --text="Server Information" \
+      --image="/usr/share/pixmaps/OSF.png" \
+      --form --separator="," --item-separator="," \
+      --field="IP" "$DEFAULT_IP" \
+      --field="PORT" "$DEFAULT_PORT" )
+      # Check the exit code of Yad
+      exit_code=$?
+
+      # If the user clicked "Install Selected"
+      if [ $exit_code -eq 0 ]; then
+        IP=$(echo "$serverinfo" | awk -F"," '{print $1}')
+        PORT=$(echo "$serverinfo" | awk -F"," '{print $2}')
+      fi
+      # Start OpenSeeFace in the background
+      echo "Running OpenSeeFace"
+      python facetracker.py -W 1280 -H 720 --discard-after 0 --scan-every 0 --no-3d-adapt 1 --max-feature-updates 900 -c 0 --ip="$IP" --port="$PORT" > /dev/null &
+
+      # PID of the background process
+      python_pid=$!
+
+      # Keep the YAD dialog open
+      yad --title="OpenSeeFace Running" --text="Click STOP to turn off the camera." \
+         --button="STOP:0"
+
+      # When the user clicks OK, kill the Python process
+      kill "$python_pid"
    elif [ $INPUT == "n" ]; then
       echo "Starting OpenSeeFace"
       python facetracker.py  -W 1280 -H 720 --discard-after 0 --scan-every 0 --no-3d-adapt 1 --max-feature-updates 900 -c 0 > /dev/null
    else
-      echo "Invalid input"
+      echo "The application has exited"
    fi
 }
 
@@ -98,15 +133,15 @@ install_packages()
    fi
 
    if [ $vseeface == "TRUE" ]; then
-      echo "This is to be implemented for now this is being used for information"
-      echo "Select the OpenSeeFace camera and select your microphone"
-      echo "You will want to use ip 127.0.0.1 and listen on port 11573 "
-      echo "Press start once you have this information entered"
-      echo "Now you will want to go to Settings>General Settings"
-      echo "Scroll down until you see OSC/VMC protocol"
-      echo "Select Send Data with OSC/VMC protocol"
-      echo "Enter ip of 127.0.0.1 and port of 39539"
-      echo "Click the X to close the general settings window and open up Warudo "
+      echo 'This is to be implemented for now this is being used for information"
+      Select the OpenSeeFace camera and select your microphone
+      You will want to use ip 127.0.0.1 and listen on port 11573
+      Press start once you have this information entered
+      Now you will want to go to Settings>General Settings
+      Scroll down until you see OSC/VMC protocol
+      Select Send Data with OSC/VMC protocol
+      Enter ip of 127.0.0.1 and port of 39539
+      Click the X to close the general settings window and open up Warudo'
    fi
 
    if [ $warudo == "TRUE" ]; then
@@ -123,14 +158,16 @@ install_packages()
 port=11573' > "$HOME/.steam/steam/steamapps/common/VTube Studio/VTube Studio_Data/StreamingAssets/ip.txt"
          fi
       else
-         echo "VTube Studio: It seems we already have this tool installed"
+         MSG="VTube Studio is already installed"
+         yad --title="Information" --text-info --width=400 --height=100 --wrap --button="OK:0" --filename=<(echo "$MSG")
       fi
    fi
 
    if [ $openseeface == "TRUE" ]; then
       sleep 1
       if [ -d "$HOME/.local/share/OpenSeeFace" ]; then
-         echo "OpenSeeFace: It seems we already have this tool installed"
+         MSG="OpenSeeFace is already installed"
+         yad --title="Information" --text-info --width=400 --height=100 --wrap --button="OK:0" --filename=<(echo "$MSG")
       else
          echo "Downloading OpenSeeFace"
          git clone https://github.com/emilianavt/OpenSeeFace $HOME/.local/share/OpenSeeFace
@@ -167,11 +204,7 @@ port=11573' > "$HOME/.steam/steam/steamapps/common/VTube Studio/VTube Studio_Dat
 # Check the command and execute the corresponding function
 case "$COMMAND" in
    "start-camera")
-      if [ -d "$HOME/.local/share/OpenSeeFace" ]; then
-         start_camera
-      else
-         echo "Error: OpenSeeFace is not installed."
-      fi
+      start_camera
       ;;
    "install")
       installer
